@@ -1,29 +1,62 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
+import React, { useEffect, useState } from "react";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { ConversationProvider } from "@/providers/conversation-provider";
+import { AuthProvider } from "@/providers/auth-provider";
 
-import { useColorScheme } from '@/hooks/useColorScheme';
+SplashScreen.preventAutoHideAsync();
+
+const queryClient = new QueryClient();
+
+function RootLayoutNav() {
+  return (
+    <Stack screenOptions={{ headerBackTitle: "Back" }}>
+      <Stack.Screen name="index" options={{ headerShown: false }} />
+      <Stack.Screen name="login" options={{ 
+        headerShown: false,
+        presentation: "modal"
+      }} />
+      <Stack.Screen name="history" options={{ 
+        title: "Conversation History",
+        headerStyle: { backgroundColor: '#1a1a2e' },
+        headerTintColor: '#fff'
+      }} />
+      <Stack.Screen name="settings" options={{ 
+        title: "Settings",
+        headerStyle: { backgroundColor: '#1a1a2e' },
+        headerTintColor: '#fff'
+      }} />
+    </Stack>
+  );
+}
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-  const [loaded] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
+  const [isReady, setIsReady] = useState<boolean>(false);
 
-  if (!loaded) {
-    // Async font loading only occurs in development.
-    return null;
-  }
+  useEffect(() => {
+    const prepare = async () => {
+      try {
+        await SplashScreen.hideAsync();
+      } catch (error) {
+        console.log('Error hiding splash screen:', error);
+      } finally {
+        setIsReady(true);
+      }
+    };
+    prepare();
+  }, []);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <AuthProvider>
+          <ConversationProvider>
+            {isReady ? <RootLayoutNav /> : null}
+          </ConversationProvider>
+        </AuthProvider>
+      </GestureHandlerRootView>
+    </QueryClientProvider>
   );
 }

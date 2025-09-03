@@ -1,50 +1,109 @@
-# Welcome to your Expo app 👋
+# IFS Therapy Conversational App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A React Native app built with Expo that provides an AI-powered conversational interface for Internal Family Systems (IFS) therapy exploration.
 
-## Get started
+## Features
 
-1. Install dependencies
+- 🎙️ Voice-to-text conversation with AI therapist
+- 🔊 Text-to-speech responses (native + Eleven Labs)
+- 💬 Conversation history management
+- ⚙️ Customizable system prompts
+- 📱 Cross-platform (iOS, Android, Web)
 
+## Environment Setup
+
+### Eleven Labs TTS (Optional)
+
+To use high-quality AI voices, add your Eleven Labs API key:
+
+1. Get an API key from [Eleven Labs](https://elevenlabs.io/)
+2. Set the environment variable:
    ```bash
-   npm install
+   export EXPO_PUBLIC_ELEVEN_LABS_API_KEY="your-api-key-here"
    ```
+3. Enable "Use Eleven Labs TTS" in the app settings
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+## Development
 
 ```bash
-npm run reset-project
+# Install dependencies
+bun install
+
+# Start development server
+bun run start
+
+# Start web version
+bun run start-web
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+## Deployment to Vercel
 
-## Learn more
+### Prerequisites
 
-To learn more about developing your project with Expo, look at the following resources:
+1. Install Vercel CLI: `npm i -g vercel`
+2. Create a Vercel account at [vercel.com](https://vercel.com)
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### Deploy Steps
 
-## Join the community
+1. **Build for web:**
+   ```bash
+   bunx expo export --platform web
+   ```
 
-Join our community of developers creating universal apps.
+2. **Deploy to Vercel:**
+   ```bash
+   vercel --prod
+   ```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+3. **Set environment variables in Vercel dashboard:**
+   - Go to your project settings
+   - Add `EXPO_PUBLIC_ELEVEN_LABS_API_KEY` if using Eleven Labs
+
+### Alternative: One-command deploy
+
+```bash
+# Build and deploy in one step
+bunx expo export --platform web && vercel --prod
+```
+
+## Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `EXPO_PUBLIC_ELEVEN_LABS_API_KEY` | Eleven Labs API key for high-quality TTS | No |
+
+## Tech Stack
+
+- **Framework:** Expo (React Native)
+- **Routing:** Expo Router
+- **State Management:** React Context + AsyncStorage
+- **AI:** Rork Toolkit API
+- **TTS:** Expo Speech + Eleven Labs
+- **STT:** Expo AV + Web Audio API
+- **Styling:** React Native StyleSheet
+
+## Project Structure
+
+```
+app/
+├── _layout.tsx          # Root layout
+├── index.tsx            # Main conversation screen
+├── history.tsx          # Conversation history
+└── settings.tsx         # App settings
+
+components/
+├── conversation-bubble.tsx
+├── voice-orb.tsx
+└── system-prompt-editor.tsx
+
+hooks/
+├── use-audio-recording.ts
+└── use-text-to-speech.ts
+
+providers/
+└── conversation-provider.tsx
+```
+
+## License
+
+MIT License - see LICENSE file for details.
