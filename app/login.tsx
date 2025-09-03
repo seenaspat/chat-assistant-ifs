@@ -1,45 +1,55 @@
-import React from 'react';
+import { useAuth } from "@/providers/auth-provider";
+import * as AppleAuthentication from "expo-apple-authentication";
+import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
+import React from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  Platform,
   ActivityIndicator,
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useAuth } from '@/providers/auth-provider';
-import { router } from 'expo-router';
-import * as AppleAuthentication from 'expo-apple-authentication';
+  Platform,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 export default function LoginScreen() {
-  const { signInWithGoogle, signInWithApple, isLoading } = useAuth();
+  const { signInWithGoogle, signInWithApple, isLoading, signOut } =
+    useAuth() as any;
+  // If we were navigated with ?logout=1, perform a sign out for safety
+  if (typeof window !== "undefined") {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("logout") === "1") {
+      console.log("[Login] detected logout param; calling signOut");
+      signOut?.();
+      url.searchParams.delete("logout");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }
 
   const handleGoogleSignIn = async () => {
     try {
+      console.log("[Login] Google button pressed");
       await signInWithGoogle();
-      router.replace('/');
+      router.replace("/");
     } catch (error) {
-      console.error('Google sign in failed:', error);
+      console.error("Google sign in failed:", error);
     }
   };
 
   const handleAppleSignIn = async () => {
     try {
+      console.log("[Login] Apple button pressed");
       await signInWithApple();
-      router.replace('/');
+      router.replace("/");
     } catch (error) {
-      console.error('Apple sign in failed:', error);
+      console.error("Apple sign in failed:", error);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <LinearGradient
-        colors={['#667eea', '#764ba2']}
-        style={styles.gradient}
-      >
+      <LinearGradient colors={["#667eea", "#764ba2"]} style={styles.gradient}>
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.title}>Welcome</Text>
@@ -58,22 +68,28 @@ export default function LoginScreen() {
                 <ActivityIndicator color="#333" />
               ) : (
                 <>
-                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  <Text style={styles.googleButtonText}>
+                    Continue with Google
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
 
-            {Platform.OS === 'ios' && (
+            {Platform.OS === "ios" && (
               <AppleAuthentication.AppleAuthenticationButton
-                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                buttonType={
+                  AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN
+                }
+                buttonStyle={
+                  AppleAuthentication.AppleAuthenticationButtonStyle.BLACK
+                }
                 cornerRadius={12}
                 style={styles.appleButton}
                 onPress={handleAppleSignIn}
               />
             )}
 
-            {Platform.OS !== 'ios' && (
+            {Platform.OS !== "ios" && (
               <TouchableOpacity
                 style={styles.appleButton}
                 onPress={handleAppleSignIn}
@@ -82,7 +98,9 @@ export default function LoginScreen() {
                 {isLoading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.appleButtonText}>Continue with Apple</Text>
+                  <Text style={styles.appleButtonText}>
+                    Continue with Apple
+                  </Text>
                 )}
               </TouchableOpacity>
             )}
@@ -106,36 +124,36 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingHorizontal: 32,
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginBottom: 64,
   },
   title: {
     fontSize: 32,
-    fontWeight: 'bold' as const,
-    color: '#fff',
+    fontWeight: "bold" as const,
+    color: "#fff",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#fff',
+    color: "#fff",
     opacity: 0.8,
-    textAlign: 'center',
+    textAlign: "center",
   },
   buttonContainer: {
     gap: 16,
     marginBottom: 32,
   },
   googleButton: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
+    alignItems: "center",
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
       height: 2,
@@ -146,28 +164,28 @@ const styles = StyleSheet.create({
   },
   googleButtonText: {
     fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#333',
+    fontWeight: "600" as const,
+    color: "#333",
   },
   appleButton: {
-    backgroundColor: '#000',
+    backgroundColor: "#000",
     paddingVertical: 16,
     paddingHorizontal: 24,
     borderRadius: 12,
-    alignItems: 'center',
+    alignItems: "center",
     height: 50,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   appleButtonText: {
     fontSize: 16,
-    fontWeight: '600' as const,
-    color: '#fff',
+    fontWeight: "600" as const,
+    color: "#fff",
   },
   disclaimer: {
     fontSize: 12,
-    color: '#fff',
+    color: "#fff",
     opacity: 0.7,
-    textAlign: 'center',
+    textAlign: "center",
     lineHeight: 16,
   },
 });

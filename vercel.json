@@ -1,7 +1,6 @@
 {
+  "outputDirectory": "dist",
   "routes": [
-    { "src": "/api/(.*)", "methods": ["GET", "POST", "OPTIONS"], "dest": "/api/$1" }
+    { "src": "/api/(.*)", "dest": "/api/$1" }
   ]
 }
-
-

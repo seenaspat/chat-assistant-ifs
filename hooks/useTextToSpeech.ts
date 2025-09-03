@@ -1,4 +1,6 @@
 import { elevenLabsProvider } from "@/utils/ai-providers";
+import { createAudioPlayer, setIsAudioActiveAsync } from "expo-audio";
+import * as FileSystem from "expo-file-system";
 import * as Speech from "expo-speech";
 import { useRef, useState } from "react";
 import { Platform } from "react-native";
@@ -8,16 +10,49 @@ export function useTextToSpeech() {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+    const bytes = new Uint8Array(buffer);
+    const base64Chars =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let base64 = "";
+    const len = bytes.length;
+    let i = 0;
+    for (; i < len - 2; i += 3) {
+      base64 += base64Chars[bytes[i] >> 2];
+      base64 += base64Chars[((bytes[i] & 3) << 4) | (bytes[i + 1] >> 4)];
+      base64 += base64Chars[((bytes[i + 1] & 15) << 2) | (bytes[i + 2] >> 6)];
+      base64 += base64Chars[bytes[i + 2] & 63];
+    }
+    if (i < len) {
+      base64 += base64Chars[bytes[i] >> 2];
+      if (i === len - 1) {
+        base64 += base64Chars[(bytes[i] & 3) << 4] + "==";
+      } else {
+        base64 += base64Chars[((bytes[i] & 3) << 4) | (bytes[i + 1] >> 4)];
+        base64 += base64Chars[(bytes[i + 1] & 15) << 2] + "=";
+      }
+    }
+    return base64;
+  };
+
   const speak = async (text: string, useElevenLabs: boolean = false) => {
     if (useElevenLabs) {
       try {
         setIsSpeaking(true);
 
         // Use the Eleven Labs provider
+        console.log("[TTS] useElevenLabs ON, generating speech...");
         const response = await elevenLabsProvider.generateSpeech({ text });
 
         if (Platform.OS === "web") {
+          console.log("[TTS] got response; converting to blob");
           const audioBlob = await response.blob();
+          console.log(
+            "[TTS] blob size=",
+            audioBlob.size,
+            "type=",
+            audioBlob.type
+          );
           const audioUrl = URL.createObjectURL(audioBlob);
 
           if (audioRef.current) {
@@ -29,23 +64,65 @@ export function useTextToSpeech() {
           audioRef.current = audio;
 
           audio.onended = () => {
+            console.log("[TTS] audio ended");
             setIsSpeaking(false);
             URL.revokeObjectURL(audioUrl);
           };
 
           audio.onerror = () => {
+            console.error("[TTS] audio playback error");
             setIsSpeaking(false);
             URL.revokeObjectURL(audioUrl);
           };
 
+          console.log("[TTS] playing audio...");
           await audio.play();
         } else {
-          // For mobile, we'd need to save the audio file and play it
-          // For now, fall back to native TTS
-          console.warn(
-            "Eleven Labs not fully supported on mobile yet, using native TTS"
-          );
-          return speakNative(text);
+          console.log("[TTS] native: creating temp file");
+          const tempUri = `${FileSystem.cacheDirectory}tts-${Date.now()}.mp3`;
+          let arrayBuffer: ArrayBuffer | null = null;
+          if (typeof (response as any).arrayBuffer === "function") {
+            try {
+              arrayBuffer = await (response as any).arrayBuffer();
+            } catch {}
+          }
+          if (!arrayBuffer && typeof (response as any).blob === "function") {
+            try {
+              const blob: any = await (response as any).blob();
+              if (blob && typeof blob.arrayBuffer === "function") {
+                arrayBuffer = await blob.arrayBuffer();
+              }
+            } catch {}
+          }
+
+          if (!arrayBuffer) {
+            console.warn(
+              "[TTS] no arrayBuffer support; falling back to native TTS"
+            );
+            setIsSpeaking(false);
+            return speakNative(text);
+          }
+
+          const base64 = arrayBufferToBase64(arrayBuffer);
+          await FileSystem.writeAsStringAsync(tempUri, base64, {
+            encoding: FileSystem.EncodingType.Base64,
+          });
+
+          await setIsAudioActiveAsync(true);
+          const player = createAudioPlayer({ uri: tempUri });
+          player.play();
+
+          const poll = setInterval(() => {
+            if (!player.playing) {
+              clearInterval(poll);
+              setIsSpeaking(false);
+              try {
+                player.remove();
+              } catch {}
+              FileSystem.deleteAsync(tempUri).catch(() => {});
+            }
+          }, 500);
+          return;
         }
       } catch (error) {
         console.error("Eleven Labs TTS error:", error);
