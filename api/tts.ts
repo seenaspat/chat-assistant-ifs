@@ -1,4 +1,4 @@
-import { elevenlabs } from "@ai-sdk/elevenlabs";
+import { createElevenLabs } from "@ai-sdk/elevenlabs";
 import { experimental_generateSpeech as generateSpeech } from "ai";
 export const config = { runtime: "edge" };
 
@@ -21,7 +21,8 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
-    const apiKey = process.env.ELEVENLABS_API_KEY;
+    const apiKey =
+      process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY;
     if (!apiKey) {
       return new Response(
         JSON.stringify({ error: "Missing ELEVENLABS_API_KEY" }),
@@ -48,11 +49,11 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
+    const provider = createElevenLabs({ apiKey });
     const result: any = await generateSpeech({
-      model: elevenlabs.speech(modelId),
+      model: provider.speech(modelId),
       text,
       providerOptions: { elevenlabs: { voice } },
-      headers: { Authorization: `Bearer ${apiKey}` },
     });
 
     // Try multiple shapes for audio data to be robust
