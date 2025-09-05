@@ -1,5 +1,6 @@
+import { useConversation } from "@/providers/conversation-provider";
 import { Audio } from "expo-av";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 
 export function useAudioRecording() {
@@ -9,9 +10,33 @@ export function useAudioRecording() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
+  const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isStoppingRef = useRef<boolean>(false);
+  const totalWebBytesRef = useRef<number>(0);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const pendingChunksRef = useRef<Blob[]>([]);
+  const isChunkUploadInFlightRef = useRef<boolean>(false);
+  const streamingTranscriptRef = useRef<string>("");
+  const streamingErrorsRef = useRef<number>(0);
+
+  const { settings } = useConversation();
+  const MAX_DURATION_MS = useMemo(
+    () => Math.max(30, Math.min(600, settings.maxRecordingDurationSec)) * 1000,
+    [settings.maxRecordingDurationSec]
+  );
+  const MAX_WEB_BLOB_BYTES = 20 * 1024 * 1024; // 20 MB
 
   const startRecording = async () => {
     try {
+      setLastError(null);
+      // Clear any previous timer/bytes
+      if (stopTimerRef.current) {
+        clearTimeout(stopTimerRef.current);
+        stopTimerRef.current = null;
+      }
+      isStoppingRef.current = false;
+      totalWebBytesRef.current = 0;
+
       if (Platform.OS === "web") {
         console.log("[Audio] requesting mic permission via getUserMedia");
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -28,19 +53,47 @@ export function useAudioRecording() {
         mediaRecorder.ondataavailable = (event) => {
           if (event.data && event.data.size > 0) {
             chunksRef.current.push(event.data);
+            totalWebBytesRef.current += event.data.size;
             console.log(
               "[Audio] dataavailable size=",
               event.data.size,
               "chunks=",
-              chunksRef.current.length
+              chunksRef.current.length,
+              "totalBytes=",
+              totalWebBytesRef.current
             );
+            if (
+              settings.experimentalStreamingTranscription &&
+              event.data.size > 8 * 1024
+            ) {
+              try {
+                pendingChunksRef.current.push(event.data);
+                void drainChunkQueue();
+              } catch (e) {
+                console.warn("[Audio] Failed to queue chunk for streaming", e);
+              }
+            }
+            if (
+              totalWebBytesRef.current > MAX_WEB_BLOB_BYTES &&
+              !isStoppingRef.current
+            ) {
+              console.warn(
+                "[Audio] Web blob exceeded threshold; auto-stopping recording"
+              );
+              setLastError(
+                "Recording auto-stopped due to size limit. Consider a shorter clip."
+              );
+              // Defer to ensure state flows correctly
+              Promise.resolve().then(() => stopRecording());
+            }
           }
         };
         mediaRecorder.onerror = (e) => {
           console.error("[Audio] MediaRecorder error", e);
         };
 
-        mediaRecorder.start();
+        // Request periodic dataavailable events to avoid one huge chunk in memory
+        mediaRecorder.start(1000);
         console.log(
           "[Audio] mediaRecorder started, state=",
           mediaRecorder.state
@@ -61,12 +114,13 @@ export function useAudioRecording() {
             audioEncoder: Audio.AndroidAudioEncoder.AAC,
           },
           ios: {
-            extension: ".wav",
-            outputFormat: Audio.IOSOutputFormat.LINEARPCM,
+            // Use AAC in .m4a for small, high-quality voice recordings
+            extension: ".m4a",
+            outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
             audioQuality: Audio.IOSAudioQuality.HIGH,
             sampleRate: 44100,
-            numberOfChannels: 2,
-            bitRate: 128000,
+            numberOfChannels: 1,
+            bitRate: 96000,
           },
           web: {
             mimeType: "audio/webm",
@@ -78,6 +132,19 @@ export function useAudioRecording() {
         recordingRef.current = recording;
         setIsRecording(true);
       }
+
+      // Auto-stop after max duration to avoid oversized uploads
+      stopTimerRef.current = setTimeout(() => {
+        if (!isStoppingRef.current) {
+          console.warn("[Audio] Auto-stopping after max duration");
+          setLastError(
+            `Recording auto-stopped after ${Math.round(
+              MAX_DURATION_MS / 1000
+            )}s to prevent timeouts.`
+          );
+          Promise.resolve().then(() => stopRecording());
+        }
+      }, MAX_DURATION_MS);
     } catch (error) {
       console.error("Failed to start recording:", error);
       throw error;
@@ -85,8 +152,13 @@ export function useAudioRecording() {
   };
 
   const stopRecording = async (): Promise<string | null> => {
+    if (isStoppingRef.current) {
+      return null;
+    }
+    isStoppingRef.current = true;
     if (!isRecording) {
       console.log("[Audio] Recording is not active, skipping stop");
+      isStoppingRef.current = false;
       return null;
     }
 
@@ -99,6 +171,7 @@ export function useAudioRecording() {
           if (!mediaRecorder || mediaRecorder.state === "inactive") {
             setIsRecording(false);
             setIsProcessing(false);
+            isStoppingRef.current = false;
             resolve(null);
             return;
           }
@@ -119,6 +192,7 @@ export function useAudioRecording() {
               type: "audio/webm",
             });
             chunksRef.current = [];
+            totalWebBytesRef.current = 0;
             console.log(
               "[Audio] built blob type=",
               audioBlob.type,
@@ -135,7 +209,14 @@ export function useAudioRecording() {
             mediaRecorderRef.current = null;
             setIsRecording(false);
             setIsProcessing(false);
-            resolve(transcript);
+            if (stopTimerRef.current) {
+              clearTimeout(stopTimerRef.current);
+              stopTimerRef.current = null;
+            }
+            isStoppingRef.current = false;
+            const aggregate = streamingTranscriptRef.current.trim();
+            streamingTranscriptRef.current = "";
+            resolve(transcript || (aggregate.length ? aggregate : null));
           };
 
           console.log(
@@ -149,6 +230,11 @@ export function useAudioRecording() {
         if (!recording) {
           setIsRecording(false);
           setIsProcessing(false);
+          if (stopTimerRef.current) {
+            clearTimeout(stopTimerRef.current);
+            stopTimerRef.current = null;
+          }
+          isStoppingRef.current = false;
           return null;
         }
 
@@ -159,6 +245,11 @@ export function useAudioRecording() {
           recordingRef.current = null;
           setIsRecording(false);
           setIsProcessing(false);
+          if (stopTimerRef.current) {
+            clearTimeout(stopTimerRef.current);
+            stopTimerRef.current = null;
+          }
+          isStoppingRef.current = false;
           return null;
         }
 
@@ -171,6 +262,11 @@ export function useAudioRecording() {
         if (!uri) {
           setIsRecording(false);
           setIsProcessing(false);
+          if (stopTimerRef.current) {
+            clearTimeout(stopTimerRef.current);
+            stopTimerRef.current = null;
+          }
+          isStoppingRef.current = false;
           return null;
         }
 
@@ -178,6 +274,11 @@ export function useAudioRecording() {
 
         setIsRecording(false);
         setIsProcessing(false);
+        if (stopTimerRef.current) {
+          clearTimeout(stopTimerRef.current);
+          stopTimerRef.current = null;
+        }
+        isStoppingRef.current = false;
         return transcript;
       }
     } catch (error) {
@@ -201,6 +302,11 @@ export function useAudioRecording() {
 
       setIsRecording(false);
       setIsProcessing(false);
+      if (stopTimerRef.current) {
+        clearTimeout(stopTimerRef.current);
+        stopTimerRef.current = null;
+      }
+      isStoppingRef.current = false;
       return null;
     }
   };
@@ -233,13 +339,19 @@ export function useAudioRecording() {
       const contentType = response.headers.get("content-type") || "";
       console.log("[Audio] /api/stt status=", response.status, contentType);
       if (!response.ok) {
-        const errText = await response.text().catch(() => "");
-        console.error(
-          "[Audio] Transcription failed: ",
-          response.status,
-          errText
-        );
-        throw new Error("Transcription failed");
+        let errorMessage = `Transcription failed (${response.status})`;
+        if (contentType.includes("application/json")) {
+          try {
+            const errJson = await response.json();
+            errorMessage = errJson?.error || errorMessage;
+          } catch {}
+        } else {
+          const errText = await response.text().catch(() => "");
+          if (errText)
+            errorMessage = `${errorMessage}: ${errText.slice(0, 200)}`;
+        }
+        setLastError(errorMessage);
+        return null;
       }
 
       if (!contentType.includes("application/json")) {
@@ -248,15 +360,56 @@ export function useAudioRecording() {
           "[Audio] Unexpected content-type from /api/stt; first 200 chars:",
           text.slice(0, 200)
         );
-        throw new Error("Invalid response from STT endpoint");
+        setLastError("Invalid response from STT endpoint");
+        return null;
       }
 
       const data = await response.json();
       console.log("[Audio] /api/stt response text=", data?.text);
-      return data.text || null;
+      if (!data?.text) {
+        setLastError("Empty transcription result");
+        return null;
+      }
+      return data.text;
     } catch (error) {
       console.error("[Audio] Transcription error:", error);
+      setLastError((error as Error)?.message || "Unknown error");
       return null;
+    }
+  };
+
+  // Drain pendingChunksRef by sending each chunk to the same endpoint; append text
+  const drainChunkQueue = async () => {
+    if (isChunkUploadInFlightRef.current) return;
+    isChunkUploadInFlightRef.current = true;
+    try {
+      while (pendingChunksRef.current.length > 0) {
+        const part = pendingChunksRef.current.shift();
+        if (!part) break;
+        const text = await transcribeAudio(part);
+        if (text) {
+          // Space-separate to avoid accidental token merging
+          streamingTranscriptRef.current =
+            `${streamingTranscriptRef.current} ${text}`.trim();
+        } else {
+          streamingErrorsRef.current += 1;
+        }
+        // Backoff if multiple errors
+        if (streamingErrorsRef.current > 3) break;
+      }
+    } finally {
+      isChunkUploadInFlightRef.current = false;
+    }
+  };
+
+  const waitForChunkUploadsToDrain = async (timeoutMs: number) => {
+    const start = Date.now();
+    while (
+      (pendingChunksRef.current.length > 0 ||
+        isChunkUploadInFlightRef.current) &&
+      Date.now() - start < timeoutMs
+    ) {
+      await new Promise((r) => setTimeout(r, 100));
     }
   };
 
@@ -274,7 +427,7 @@ export function useAudioRecording() {
       };
 
       const formData = new FormData();
-      formData.append("audio", audioFile as any);
+      formData.append("audio", audioFile as unknown as Blob);
 
       const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || "";
       if (!baseUrl) {
@@ -291,7 +444,19 @@ export function useAudioRecording() {
 
       const contentType = response.headers.get("content-type") || "";
       if (!response.ok) {
-        throw new Error("Transcription failed");
+        let errorMessage = `Transcription failed (${response.status})`;
+        if (contentType.includes("application/json")) {
+          try {
+            const errJson = await response.json();
+            errorMessage = errJson?.error || errorMessage;
+          } catch {}
+        } else {
+          const errText = await response.text().catch(() => "");
+          if (errText)
+            errorMessage = `${errorMessage}: ${errText.slice(0, 200)}`;
+        }
+        setLastError(errorMessage);
+        return null;
       }
 
       if (!contentType.includes("application/json")) {
@@ -300,21 +465,37 @@ export function useAudioRecording() {
           "[Audio] Unexpected content-type from /api/stt (native); first 200 chars:",
           text.slice(0, 200)
         );
-        throw new Error("Invalid response from STT endpoint");
+        setLastError("Invalid response from STT endpoint");
+        return null;
       }
 
       const data = await response.json();
-      return data.text || null;
+      if (!data?.text) {
+        setLastError("Empty transcription result");
+        return null;
+      }
+      return data.text;
     } catch (error) {
       console.error("Transcription error:", error);
+      setLastError((error as Error)?.message || "Unknown error");
       return null;
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (stopTimerRef.current) {
+        clearTimeout(stopTimerRef.current);
+        stopTimerRef.current = null;
+      }
+    };
+  }, []);
 
   return {
     isRecording,
     isProcessing,
     startRecording,
     stopRecording,
+    lastError,
   };
 }

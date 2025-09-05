@@ -1,4 +1,4 @@
-export const config = { runtime: "edge" };
+export const config = { runtime: "nodejs" };
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -18,6 +18,10 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
+    // Keep uploads small to avoid platform limits
+    const MAX_FILE_BYTES = 20 * 1024 * 1024; // 20 MB
+    const UPSTREAM_TIMEOUT_MS = 60_000; // 60s
+
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
       return new Response(JSON.stringify({ error: "Missing OPENAI_API_KEY" }), {
@@ -49,28 +53,66 @@ export default async function handler(req: Request): Promise<Response> {
       });
     }
 
-    const openaiRes = await fetch(
-      "https://api.openai.com/v1/audio/transcriptions",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: (() => {
-          const fd = new FormData();
-          fd.append("file", file, file.name || "audio.webm");
-          fd.append("model", "whisper-1");
-          return fd;
-        })(),
-      }
-    );
+    if (
+      typeof (file as File).size === "number" &&
+      (file as File).size > MAX_FILE_BYTES
+    ) {
+      return new Response(
+        JSON.stringify({
+          error:
+            "Audio too large. Please keep recordings under 2 minutes (<= 20MB).",
+          details: { size: (file as File).size },
+        }),
+        {
+          status: 413,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), UPSTREAM_TIMEOUT_MS);
+    let openaiRes: Response;
+    try {
+      openaiRes = await fetch(
+        "https://api.openai.com/v1/audio/transcriptions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: (() => {
+            const fd = new FormData();
+            fd.append("file", file, (file as File).name || "audio.webm");
+            fd.append("model", "whisper-1");
+            return fd;
+          })(),
+          signal: controller.signal,
+        }
+      );
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!openaiRes.ok) {
-      const text = await openaiRes.text();
-      return new Response(text, {
-        status: openaiRes.status,
-        headers: corsHeaders,
-      });
+      const contentTypeUp = openaiRes.headers.get("content-type") || "";
+      let details: string | object = "";
+      if (contentTypeUp.includes("application/json")) {
+        try {
+          details = await openaiRes.json();
+        } catch {
+          details = await openaiRes.text().catch(() => "");
+        }
+      } else {
+        details = await openaiRes.text().catch(() => "");
+      }
+      return new Response(
+        JSON.stringify({ error: "Upstream STT failed", details }),
+        {
+          status: openaiRes.status,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
     }
 
     const data = await openaiRes.json();
@@ -80,12 +122,13 @@ export default async function handler(req: Request): Promise<Response> {
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   } catch (err: any) {
-    return new Response(
-      JSON.stringify({ error: err?.message || "Unknown error" }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      }
-    );
+    const isAbort = err?.name === "AbortError";
+    const message = isAbort
+      ? "Transcription timed out. Please try a shorter recording."
+      : err?.message || "Unknown error";
+    return new Response(JSON.stringify({ error: message }), {
+      status: isAbort ? 504 : 500,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
   }
 }
