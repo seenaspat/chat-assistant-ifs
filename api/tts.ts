@@ -1,5 +1,4 @@
-import { createElevenLabs } from "@ai-sdk/elevenlabs";
-import { experimental_generateSpeech as generateSpeech } from "ai";
+// SDK imports removed; using REST path for reliability
 export const config = { runtime: "edge" };
 
 const corsHeaders = {
@@ -167,41 +166,7 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
-    try {
-      const provider = createElevenLabs({ apiKey });
-      const result: any = await generateSpeech({
-        model: provider.speech(modelId),
-        text,
-        providerOptions: { elevenlabs: { voice } },
-      });
-
-      // Try multiple shapes for audio data to be robust
-      const audio = result?.audio ?? result;
-      let bytes: Uint8Array | null = null;
-      if (audio?.uint8Array) bytes = audio.uint8Array as Uint8Array;
-      else if (audio?.audioData) bytes = audio.audioData as Uint8Array;
-      else if (audio instanceof Uint8Array) bytes = audio as Uint8Array;
-      else if (typeof audio?.arrayBuffer === "function") {
-        const buf = await audio.arrayBuffer();
-        bytes = new Uint8Array(buf);
-      }
-
-      if (bytes) {
-        return new Response(bytes, {
-          status: 200,
-          headers: { "Content-Type": "audio/mpeg", ...corsHeaders },
-        });
-      }
-      console.error("[TTS] No audio from SDK, falling back to REST");
-    } catch (sdkErr: any) {
-      // Fall through to REST on any auth/SDK error
-      console.error(
-        "[TTS] SDK path failed, falling back to REST:",
-        sdkErr?.message || sdkErr
-      );
-    }
-
-    // Fallback: direct REST call with xi-api-key
+    // Direct REST call with xi-api-key ensures correct voice selection
     const upstream = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voice}`,
       {
