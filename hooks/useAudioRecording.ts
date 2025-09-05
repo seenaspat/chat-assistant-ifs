@@ -1,6 +1,5 @@
-import { useConversation } from "@/providers/conversation-provider";
 import { Audio } from "expo-av";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 
 export function useAudioRecording() {
@@ -14,16 +13,9 @@ export function useAudioRecording() {
   const isStoppingRef = useRef<boolean>(false);
   const totalWebBytesRef = useRef<number>(0);
   const [lastError, setLastError] = useState<string | null>(null);
-  const pendingChunksRef = useRef<Blob[]>([]);
-  const isChunkUploadInFlightRef = useRef<boolean>(false);
-  const streamingTranscriptRef = useRef<string>("");
-  const streamingErrorsRef = useRef<number>(0);
 
-  const { settings } = useConversation();
-  const MAX_DURATION_MS = useMemo(
-    () => Math.max(30, Math.min(600, settings.maxRecordingDurationSec)) * 1000,
-    [settings.maxRecordingDurationSec]
-  );
+  // Limits to keep uploads small and reliable
+  const MAX_DURATION_MS = 2 * 60 * 1000; // 2 minutes
   const MAX_WEB_BLOB_BYTES = 20 * 1024 * 1024; // 20 MB
 
   const startRecording = async () => {
@@ -63,25 +55,11 @@ export function useAudioRecording() {
               totalWebBytesRef.current
             );
             if (
-              settings.experimentalStreamingTranscription &&
-              event.data.size > 8 * 1024
-            ) {
-              try {
-                pendingChunksRef.current.push(event.data);
-                void drainChunkQueue();
-              } catch (e) {
-                console.warn("[Audio] Failed to queue chunk for streaming", e);
-              }
-            }
-            if (
               totalWebBytesRef.current > MAX_WEB_BLOB_BYTES &&
               !isStoppingRef.current
             ) {
               console.warn(
                 "[Audio] Web blob exceeded threshold; auto-stopping recording"
-              );
-              setLastError(
-                "Recording auto-stopped due to size limit. Consider a shorter clip."
               );
               // Defer to ensure state flows correctly
               Promise.resolve().then(() => stopRecording());
@@ -137,11 +115,6 @@ export function useAudioRecording() {
       stopTimerRef.current = setTimeout(() => {
         if (!isStoppingRef.current) {
           console.warn("[Audio] Auto-stopping after max duration");
-          setLastError(
-            `Recording auto-stopped after ${Math.round(
-              MAX_DURATION_MS / 1000
-            )}s to prevent timeouts.`
-          );
           Promise.resolve().then(() => stopRecording());
         }
       }, MAX_DURATION_MS);
@@ -214,9 +187,7 @@ export function useAudioRecording() {
               stopTimerRef.current = null;
             }
             isStoppingRef.current = false;
-            const aggregate = streamingTranscriptRef.current.trim();
-            streamingTranscriptRef.current = "";
-            resolve(transcript || (aggregate.length ? aggregate : null));
+            resolve(transcript);
           };
 
           console.log(
@@ -375,41 +346,6 @@ export function useAudioRecording() {
       console.error("[Audio] Transcription error:", error);
       setLastError((error as Error)?.message || "Unknown error");
       return null;
-    }
-  };
-
-  // Drain pendingChunksRef by sending each chunk to the same endpoint; append text
-  const drainChunkQueue = async () => {
-    if (isChunkUploadInFlightRef.current) return;
-    isChunkUploadInFlightRef.current = true;
-    try {
-      while (pendingChunksRef.current.length > 0) {
-        const part = pendingChunksRef.current.shift();
-        if (!part) break;
-        const text = await transcribeAudio(part);
-        if (text) {
-          // Space-separate to avoid accidental token merging
-          streamingTranscriptRef.current =
-            `${streamingTranscriptRef.current} ${text}`.trim();
-        } else {
-          streamingErrorsRef.current += 1;
-        }
-        // Backoff if multiple errors
-        if (streamingErrorsRef.current > 3) break;
-      }
-    } finally {
-      isChunkUploadInFlightRef.current = false;
-    }
-  };
-
-  const waitForChunkUploadsToDrain = async (timeoutMs: number) => {
-    const start = Date.now();
-    while (
-      (pendingChunksRef.current.length > 0 ||
-        isChunkUploadInFlightRef.current) &&
-      Date.now() - start < timeoutMs
-    ) {
-      await new Promise((r) => setTimeout(r, 100));
     }
   };
 

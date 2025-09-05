@@ -12,6 +12,9 @@ type ModelMessage = {
 };
 
 export default async function handler(req: Request): Promise<Response> {
+  try {
+    console.log("[API/LLM] method=", req.method);
+  } catch {}
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -23,7 +26,18 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
+    const start = Date.now();
     const { messages, stream, model } = await req.json();
+    try {
+      console.log(
+        "[API/LLM] req stream=",
+        !!stream,
+        "model=",
+        model,
+        "messages=",
+        Array.isArray(messages) ? messages.length : 0
+      );
+    } catch {}
 
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -52,6 +66,9 @@ export default async function handler(req: Request): Promise<Response> {
 
     if (!response.ok) {
       const text = await response.text();
+      try {
+        console.error("[API/LLM] upstream error status=", response.status);
+      } catch {}
       return new Response(text, {
         status: response.status,
         headers: corsHeaders,
@@ -60,6 +77,14 @@ export default async function handler(req: Request): Promise<Response> {
 
     const data = await response.json();
     const text: string = data?.choices?.[0]?.message?.content ?? "";
+    try {
+      console.log(
+        "[API/LLM] success text len=",
+        text?.length || 0,
+        "elapsedMs=",
+        Date.now() - start
+      );
+    } catch {}
 
     if (!stream) {
       return new Response(JSON.stringify({ text }), {
@@ -89,6 +114,9 @@ export default async function handler(req: Request): Promise<Response> {
       headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders },
     });
   } catch (err: any) {
+    try {
+      console.error("[API/LLM] error=", err?.message || err);
+    } catch {}
     return new Response(
       JSON.stringify({ error: err?.message || "Unknown error" }),
       {

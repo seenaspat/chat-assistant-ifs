@@ -6,7 +6,6 @@ import { useAudioRecording } from "@/hooks/useAudioRecording";
 import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { useAuth } from "@/providers/auth-provider";
 import { useConversation } from "@/providers/conversation-provider";
-import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -47,7 +46,6 @@ export default function HomeScreen() {
   const [isListening, setIsListening] = useState<boolean>(false);
   const [showSystemPromptEditor, setShowSystemPromptEditor] =
     useState<boolean>(false);
-  const [isVoicePressed, setIsVoicePressed] = useState<boolean>(false);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -118,11 +116,6 @@ export default function HomeScreen() {
       try {
         const transcript = await stopRecording();
         setIsListening(false);
-        if (Platform.OS !== "web") {
-          Haptics.notificationAsync(
-            Haptics.NotificationFeedbackType.Success
-          ).catch(() => {});
-        }
 
         if (transcript) {
           const response = await sendMessage(transcript);
@@ -133,19 +126,9 @@ export default function HomeScreen() {
           setTimeout(() => {
             scrollViewRef.current?.scrollToEnd({ animated: true });
           }, 100);
-        } else {
-          // If no transcript, surface last error if available
-          if ((lastError || "").length > 0) {
-            Alert.alert("Transcription Error", lastError!);
-          }
         }
       } catch {
         setIsListening(false);
-        if (Platform.OS !== "web") {
-          Haptics.notificationAsync(
-            Haptics.NotificationFeedbackType.Error
-          ).catch(() => {});
-        }
         Alert.alert(
           "Transcription Error",
           lastError || "Failed to process audio. Please try again."
@@ -358,36 +341,14 @@ export default function HomeScreen() {
                 <View style={styles.voiceWrapper} pointerEvents={"box-none"}>
                   <Pressable
                     pointerEvents={"auto"}
-                    style={({ pressed }) => [
-                      styles.voiceSection,
-                      pressed && styles.voiceSectionPressed,
-                    ]}
+                    style={styles.voiceSection}
                     onPress={handlePress}
-                    onPressIn={() => {
-                      setIsVoicePressed(true);
-                      if (Platform.OS !== "web") {
-                        Haptics.impactAsync(
-                          Haptics.ImpactFeedbackStyle.Light
-                        ).catch(() => {});
-                      }
-                    }}
-                    onPressOut={() => setIsVoicePressed(false)}
-                    android_ripple={{ color: "rgba(255,255,255,0.08)" }}
                     testID="voice-pressable"
                     disabled={isDragging}
                   >
                     <View style={styles.voiceContent}>
                       <Animated.View
-                        style={{
-                          transform: [
-                            {
-                              scale: Animated.multiply(
-                                pulseAnim,
-                                isVoicePressed ? 0.97 : 1
-                              ),
-                            },
-                          ],
-                        }}
+                        style={{ transform: [{ scale: pulseAnim }] }}
                       >
                         <VoiceOrb
                           isActive={isRecording || isListening || isSpeaking}
@@ -558,9 +519,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: 24,
-  },
-  voiceSectionPressed: {
-    backgroundColor: "rgba(255,255,255,0.04)",
   },
   voiceContent: {
     justifyContent: "center",

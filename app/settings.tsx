@@ -3,14 +3,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
 import { Headphones, Info, Mic, Volume2 } from "lucide-react-native";
 import React from "react";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  View,
-} from "react-native";
+import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SettingsScreen() {
@@ -79,40 +72,6 @@ export default function SettingsScreen() {
                   trackColor={{ false: "#767577", true: "#4a9eff" }}
                   thumbColor={settings.useElevenLabs ? "#fff" : "#f4f3f4"}
                 />
-              </View>
-            </View>
-
-            <View style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <Mic color="#4a9eff" size={20} />
-                <View style={styles.settingTextContainer}>
-                  <Text style={styles.settingLabel}>
-                    Max recording duration
-                  </Text>
-                  <Text style={styles.settingDescription}>
-                    Prevents oversized uploads and timeouts
-                  </Text>
-                </View>
-              </View>
-              <View
-                style={{ flexDirection: "row", gap: 8, alignItems: "center" }}
-              >
-                {[60, 120, 180].map((sec) => (
-                  <Pressable
-                    key={sec}
-                    style={[
-                      styles.durationChip,
-                      settings.maxRecordingDurationSec === sec &&
-                        styles.durationChipActive,
-                    ]}
-                    onPress={() =>
-                      updateSettings({ maxRecordingDurationSec: sec })
-                    }
-                    testID={`duration-${sec}`}
-                  >
-                    <Text style={styles.durationChipText}>{sec / 60}m</Text>
-                  </Pressable>
-                ))}
               </View>
             </View>
 
@@ -204,23 +163,6 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.6)",
     fontSize: 12,
     marginTop: 2,
-  },
-  durationChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(74, 158, 255, 0.5)",
-    backgroundColor: "rgba(74, 158, 255, 0.1)",
-  },
-  durationChipActive: {
-    backgroundColor: "rgba(74, 158, 255, 0.3)",
-    borderColor: "rgba(74, 158, 255, 0.9)",
-  },
-  durationChipText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "500",
   },
   disclaimer: {
     color: "rgba(255, 255, 255, 0.6)",
