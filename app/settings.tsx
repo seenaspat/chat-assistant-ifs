@@ -1,12 +1,9 @@
-import { useTextToSpeech } from "@/hooks/useTextToSpeech";
 import { useConversation } from "@/providers/conversation-provider";
-import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { StatusBar } from "expo-status-bar";
-import { Headphones, Info, Mic, Play, Volume2 } from "lucide-react-native";
+import { Headphones, Info, Mic, Volume2 } from "lucide-react-native";
 import React from "react";
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,76 +15,6 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function SettingsScreen() {
   const { settings, updateSettings } = useConversation();
-  const { speak, stop, isSpeaking } = useTextToSpeech();
-  const [voices, setVoices] = React.useState<
-    { voice_id: string; name: string; preview_url?: string | null }[]
-  >([]);
-  const [loadingVoices, setLoadingVoices] = React.useState(false);
-  const [voiceError, setVoiceError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    let isMounted = true;
-    const fetchVoices = async () => {
-      if (!settings.useElevenLabs) return;
-      setLoadingVoices(true);
-      setVoiceError(null);
-      try {
-        const envBase = process.env.EXPO_PUBLIC_API_BASE_URL || "";
-        console.log(
-          "[Settings:Voices] platform=",
-          Platform.OS,
-          "envBase=",
-          envBase
-        );
-        const resolvedBase =
-          Platform.OS === "web"
-            ? envBase ||
-              (typeof window !== "undefined" ? window.location.origin : "")
-            : envBase;
-        console.log("[Settings:Voices] resolvedBase=", resolvedBase);
-        if (!resolvedBase) {
-          throw new Error(
-            "Server URL not configured. Set EXPO_PUBLIC_API_BASE_URL."
-          );
-        }
-        const url = `${resolvedBase}/api/tts`;
-        console.log("[Settings:Voices] fetching", url, "method=GET");
-        let res = await fetch(url, { method: "GET" });
-        console.log("[Settings:Voices] GET status", res.status, res.statusText);
-        if (res.status === 405) {
-          console.log(
-            "[Settings:Voices] GET 405, falling back to POST action=voices"
-          );
-          res = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "voices" }),
-          });
-          console.log(
-            "[Settings:Voices] POST voices status",
-            res.status,
-            res.statusText
-          );
-        }
-        if (!res.ok) throw new Error(`Failed to load voices (${res.status})`);
-        const data = await res.json();
-        console.log(
-          "[Settings:Voices] voices loaded count=",
-          Array.isArray(data?.voices) ? data.voices.length : 0
-        );
-        if (isMounted) setVoices(data.voices || []);
-      } catch (e: any) {
-        console.log("[Settings:Voices] fetch error", e?.message || e);
-        if (isMounted) setVoiceError(e?.message || "Failed to load voices");
-      } finally {
-        if (isMounted) setLoadingVoices(false);
-      }
-    };
-    fetchVoices();
-    return () => {
-      isMounted = false;
-    };
-  }, [settings.useElevenLabs]);
 
   return (
     <View style={styles.container}>
@@ -153,73 +80,6 @@ export default function SettingsScreen() {
                   thumbColor={settings.useElevenLabs ? "#fff" : "#f4f3f4"}
                 />
               </View>
-
-              {settings.useElevenLabs && (
-                <View style={{ gap: 8 }}>
-                  <View
-                    style={[styles.settingItem, { alignItems: "flex-start" }]}
-                  >
-                    <View style={styles.settingLeft}>
-                      <Text style={styles.settingLabel}>Voice</Text>
-                    </View>
-                  </View>
-
-                  {loadingVoices ? (
-                    <Text style={styles.loadingText}>Loading voices…</Text>
-                  ) : voiceError ? (
-                    <Text style={styles.errorText}>{voiceError}</Text>
-                  ) : voices.length === 0 ? (
-                    <Text style={styles.loadingText}>No voices available.</Text>
-                  ) : (
-                    <View style={styles.voiceList}>
-                      {voices.map((v) => {
-                        const isSelected = settings.voiceId === v.voice_id;
-                        return (
-                          <View key={v.voice_id} style={styles.voiceRow}>
-                            <Pressable
-                              style={[
-                                styles.voiceChip,
-                                isSelected && styles.voiceChipActive,
-                              ]}
-                              onPress={() =>
-                                updateSettings({ voiceId: v.voice_id })
-                              }
-                              testID={`voice-${v.voice_id}`}
-                            >
-                              <Text
-                                style={styles.voiceChipText}
-                                numberOfLines={1}
-                              >
-                                {v.name}
-                              </Text>
-                            </Pressable>
-                            <Pressable
-                              style={styles.previewButton}
-                              onPress={async () => {
-                                try {
-                                  if (isSpeaking) stop();
-                                  await Haptics.impactAsync(
-                                    Haptics.ImpactFeedbackStyle.Light
-                                  ).catch(() => {});
-                                  await speak(
-                                    "Hello, this is a short sample for this voice.",
-                                    true,
-                                    v.voice_id
-                                  );
-                                } catch {}
-                              }}
-                              testID={`preview-${v.voice_id}`}
-                            >
-                              <Play size={14} color="#4a9eff" />
-                              <Text style={styles.previewText}>Preview</Text>
-                            </Pressable>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
-                </View>
-              )}
             </View>
 
             <View style={styles.settingItem}>
@@ -367,57 +227,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     fontStyle: "italic",
-  },
-  loadingText: {
-    color: "rgba(255, 255, 255, 0.8)",
-    fontSize: 12,
-    paddingVertical: 8,
-  },
-  errorText: {
-    color: "#ff6b6b",
-    fontSize: 12,
-    paddingVertical: 8,
-  },
-  voiceList: {
-    gap: 8,
-  },
-  voiceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  voiceChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "rgba(74, 158, 255, 0.5)",
-    backgroundColor: "rgba(74, 158, 255, 0.1)",
-    flexShrink: 1,
-    maxWidth: "70%",
-  },
-  voiceChipActive: {
-    backgroundColor: "rgba(74, 158, 255, 0.3)",
-    borderColor: "rgba(74, 158, 255, 0.9)",
-  },
-  voiceChipText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  previewButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: "rgba(74, 158, 255, 0.15)",
-  },
-  previewText: {
-    color: "#4a9eff",
-    fontSize: 12,
-    fontWeight: "600",
   },
 });

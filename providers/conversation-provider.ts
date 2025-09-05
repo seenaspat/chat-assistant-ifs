@@ -26,7 +26,6 @@ export interface ConversationSettings {
   useElevenLabs: boolean;
   maxRecordingDurationSec: number;
   experimentalStreamingTranscription: boolean;
-  voiceId?: string;
 }
 
 const IFS_SYSTEM_PROMPT = `You are a compassionate IFS (Internal Family Systems) therapist. Your role is to help users explore their internal parts and connect with their Self.
@@ -55,7 +54,6 @@ export const [ConversationProvider, useConversation] = createContextHook(() => {
     useElevenLabs: false,
     maxRecordingDurationSec: 120,
     experimentalStreamingTranscription: false,
-    voiceId: "pNInz6obpgDQGcFmaJgB",
   });
 
   const currentConversation = useMemo(

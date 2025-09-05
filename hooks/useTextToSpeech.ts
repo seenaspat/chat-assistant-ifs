@@ -1,4 +1,3 @@
-import { useConversation } from "@/providers/conversation-provider";
 import { elevenLabsProvider } from "@/utils/ai-providers";
 import { createAudioPlayer, setIsAudioActiveAsync } from "expo-audio";
 import * as FileSystem from "expo-file-system";
@@ -10,7 +9,6 @@ export function useTextToSpeech() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const { settings } = useConversation();
 
   const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
     const bytes = new Uint8Array(buffer);
@@ -37,21 +35,14 @@ export function useTextToSpeech() {
     return base64;
   };
 
-  const speak = async (
-    text: string,
-    useElevenLabs: boolean = false,
-    voiceIdOverride?: string
-  ) => {
+  const speak = async (text: string, useElevenLabs: boolean = false) => {
     if (useElevenLabs) {
       try {
         setIsSpeaking(true);
 
         // Use the Eleven Labs provider
         console.log("[TTS] useElevenLabs ON, generating speech...");
-        const response = await elevenLabsProvider.generateSpeech({
-          text,
-          voice: voiceIdOverride || settings.voiceId || undefined,
-        });
+        const response = await elevenLabsProvider.generateSpeech({ text });
 
         if (Platform.OS === "web") {
           console.log("[TTS] got response; converting to blob");
