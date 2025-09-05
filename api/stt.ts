@@ -7,6 +7,9 @@ const corsHeaders = {
 };
 
 export default async function handler(req: Request): Promise<Response> {
+  try {
+    console.log("[API/STT] method=", req.method);
+  } catch {}
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
@@ -32,6 +35,9 @@ export default async function handler(req: Request): Promise<Response> {
 
     // Expect multipart/form-data with 'audio' field
     const contentType = req.headers.get("content-type") || "";
+    try {
+      console.log("[API/STT] content-type=", contentType);
+    } catch {}
     if (!contentType.includes("multipart/form-data")) {
       return new Response(
         JSON.stringify({ error: "Expected multipart/form-data" }),
@@ -44,6 +50,16 @@ export default async function handler(req: Request): Promise<Response> {
 
     const formData = await req.formData();
     const file = (formData as any).get("audio");
+    try {
+      console.log(
+        "[API/STT] file present=",
+        !!file,
+        "size=",
+        (file as any)?.size,
+        "name=",
+        (file as any)?.name
+      );
+    } catch {}
     // Debug headers for troubleshooting
     // console.log('STT: content-type', contentType, 'file is File?', file instanceof File, 'name', (file as any)?.name);
     if (!(file instanceof File)) {
@@ -90,6 +106,13 @@ export default async function handler(req: Request): Promise<Response> {
           signal: controller.signal,
         }
       );
+      try {
+        console.log(
+          "[API/STT] upstream status=",
+          openaiRes.status,
+          openaiRes.statusText
+        );
+      } catch {}
     } finally {
       clearTimeout(timeoutId);
     }
@@ -117,12 +140,18 @@ export default async function handler(req: Request): Promise<Response> {
 
     const data = await openaiRes.json();
     const text = data?.text || "";
+    try {
+      console.log("[API/STT] success text len=", text?.length || 0);
+    } catch {}
     return new Response(JSON.stringify({ text }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders },
     });
   } catch (err: any) {
     const isAbort = err?.name === "AbortError";
+    try {
+      console.error("[API/STT] error=", err?.message || err);
+    } catch {}
     const message = isAbort
       ? "Transcription timed out. Please try a shorter recording."
       : err?.message || "Unknown error";

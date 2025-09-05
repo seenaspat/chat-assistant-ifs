@@ -24,6 +24,9 @@ export interface ConversationSettings {
   autoPlayResponses: boolean;
   voiceActivation: boolean;
   useElevenLabs: boolean;
+  maxRecordingDurationSec: number;
+  experimentalStreamingTranscription: boolean;
+  voiceId?: string;
 }
 
 const IFS_SYSTEM_PROMPT = `You are a compassionate IFS (Internal Family Systems) therapist. Your role is to help users explore their internal parts and connect with their Self.
@@ -50,6 +53,9 @@ export const [ConversationProvider, useConversation] = createContextHook(() => {
     autoPlayResponses: true,
     voiceActivation: false,
     useElevenLabs: false,
+    maxRecordingDurationSec: 120,
+    experimentalStreamingTranscription: false,
+    voiceId: "pNInz6obpgDQGcFmaJgB",
   });
 
   const currentConversation = useMemo(
@@ -158,7 +164,11 @@ export const [ConversationProvider, useConversation] = createContextHook(() => {
     try {
       const stored = await AsyncStorage.getItem("ifs_settings");
       if (stored) {
-        setSettings(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        setSettings((prev) => ({
+          ...prev,
+          ...parsed,
+        }));
       }
     } catch (error) {
       console.error("Failed to load settings:", error);
