@@ -1,5 +1,6 @@
 import { useConversation } from "@/providers/conversation-provider";
 import { Audio } from "expo-av";
+import * as FileSystem from "expo-file-system";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 
@@ -240,6 +241,7 @@ export function useAudioRecording() {
 
         // Check if recording is still active before stopping
         const status = await recording.getStatusAsync();
+        console.log("[Audio] Native status before stop:", status);
         if (!status.isRecording) {
           console.log("[Audio] Native recording not active, cleaning up");
           recordingRef.current = null;
@@ -253,13 +255,30 @@ export function useAudioRecording() {
           return null;
         }
 
+        console.log("[Audio] Stopping and unloading native recording...");
         await recording.stopAndUnloadAsync();
+        console.log("[Audio] stopAndUnloadAsync complete");
         recordingRef.current = null;
 
         await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
 
         const uri = recording.getURI();
+        console.log("[Audio] getURI()=", uri);
+        if (uri) {
+          try {
+            const info = await FileSystem.getInfoAsync(uri);
+            console.log(
+              "[Audio] file info exists=",
+              info.exists,
+              "isDirectory=",
+              (info as any)?.isDirectory
+            );
+          } catch (e) {
+            console.log("[Audio] getInfoAsync failed", e);
+          }
+        }
         if (!uri) {
+          setLastError("No recording file URI returned");
           setIsRecording(false);
           setIsProcessing(false);
           if (stopTimerRef.current) {
@@ -326,18 +345,26 @@ export function useAudioRecording() {
       }
 
       console.log(
-        "[Audio] POST /api/stt baseUrl=",
+        "[Audio] POST /api/stt (web) baseUrl=",
         baseUrl,
         "blobSize=",
         audioBlob.size
       );
+      const controller = new AbortController();
+      const STT_TIMEOUT_MS = 45000;
+      const timeoutId = setTimeout(() => controller.abort(), STT_TIMEOUT_MS);
       const response = await fetch(`${baseUrl}/api/stt`, {
         method: "POST",
         body: formData,
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
 
       const contentType = response.headers.get("content-type") || "";
-      console.log("[Audio] /api/stt status=", response.status, contentType);
+      console.log(
+        "[Audio] /api/stt (web) status=",
+        response.status,
+        contentType
+      );
       if (!response.ok) {
         let errorMessage = `Transcription failed (${response.status})`;
         if (contentType.includes("application/json")) {
@@ -365,15 +392,23 @@ export function useAudioRecording() {
       }
 
       const data = await response.json();
-      console.log("[Audio] /api/stt response text=", data?.text);
+      console.log(
+        "[Audio] /api/stt (web) response text len=",
+        (data?.text || "").length
+      );
       if (!data?.text) {
         setLastError("Empty transcription result");
         return null;
       }
       return data.text;
     } catch (error) {
-      console.error("[Audio] Transcription error:", error);
-      setLastError((error as Error)?.message || "Unknown error");
+      const isAbort = (error as any)?.name === "AbortError";
+      console.error("[Audio] Transcription error (web):", error);
+      setLastError(
+        isAbort
+          ? "Transcription timed out"
+          : (error as Error)?.message || "Unknown error"
+      );
       return null;
     }
   };
@@ -437,12 +472,34 @@ export function useAudioRecording() {
         throw new Error("Missing API base URL");
       }
 
+      try {
+        const info = await FileSystem.getInfoAsync(uri);
+        console.log(
+          "[Audio] POST /api/stt (native) uri=",
+          uri,
+          "exists=",
+          info.exists,
+          "isDirectory=",
+          (info as any)?.isDirectory
+        );
+      } catch {}
+
+      const controller = new AbortController();
+      const STT_TIMEOUT_MS = 45000;
+      const timeoutId = setTimeout(() => controller.abort(), STT_TIMEOUT_MS);
       const response = await fetch(`${baseUrl}/api/stt`, {
         method: "POST",
         body: formData,
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
 
       const contentType = response.headers.get("content-type") || "";
+      console.log(
+        "[Audio] /api/stt (native) status=",
+        response.status,
+        response.statusText,
+        contentType
+      );
       if (!response.ok) {
         let errorMessage = `Transcription failed (${response.status})`;
         if (contentType.includes("application/json")) {
@@ -470,14 +527,23 @@ export function useAudioRecording() {
       }
 
       const data = await response.json();
+      console.log(
+        "[Audio] /api/stt (native) text len=",
+        (data?.text || "").length
+      );
       if (!data?.text) {
         setLastError("Empty transcription result");
         return null;
       }
       return data.text;
     } catch (error) {
-      console.error("Transcription error:", error);
-      setLastError((error as Error)?.message || "Unknown error");
+      const isAbort = (error as any)?.name === "AbortError";
+      console.error("[Audio] Transcription error (native):", error);
+      setLastError(
+        isAbort
+          ? "Transcription timed out"
+          : (error as Error)?.message || "Unknown error"
+      );
       return null;
     }
   };

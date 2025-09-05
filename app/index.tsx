@@ -108,6 +108,12 @@ export default function HomeScreen() {
   ]);
 
   const handlePress = async () => {
+    console.log(
+      "[UI] handlePress: isSpeaking=",
+      isSpeaking,
+      "isRecording=",
+      isRecording
+    );
     if (isSpeaking) {
       stopSpeaking();
       return;
@@ -116,6 +122,7 @@ export default function HomeScreen() {
     if (isRecording) {
       setIsListening(true);
       try {
+        console.log("[UI] handlePress: calling stopRecording()");
         const STOP_TIMEOUT_MS = 45000;
         const timeoutPromise = new Promise<"__TIMEOUT__">((resolve) =>
           setTimeout(() => resolve("__TIMEOUT__"), STOP_TIMEOUT_MS)
@@ -124,6 +131,7 @@ export default function HomeScreen() {
           stopRecording(),
           timeoutPromise,
         ])) as string | null | "__TIMEOUT__";
+        console.log("[UI] handlePress: stopRecording result=", result);
         if (result === "__TIMEOUT__") {
           setIsListening(false);
           if (Platform.OS !== "web") {
@@ -146,8 +154,17 @@ export default function HomeScreen() {
         }
 
         if (transcript) {
+          console.log(
+            "[UI] handlePress: sending message, transcript len=",
+            transcript.length
+          );
           const response = await sendMessage(transcript);
+          console.log(
+            "[UI] handlePress: sendMessage response len=",
+            (response || "").length
+          );
           if (response && settings.autoPlayResponses) {
+            console.log("[UI] handlePress: speaking response");
             speak(response, settings.useElevenLabs);
           }
           // Auto-scroll to bottom after new message
@@ -156,11 +173,16 @@ export default function HomeScreen() {
           }, 100);
         } else {
           // If no transcript, surface last error if available
+          console.log(
+            "[UI] handlePress: empty transcript, lastError=",
+            lastError
+          );
           if ((lastError || "").length > 0) {
             Alert.alert("Transcription Error", lastError!);
           }
         }
-      } catch {
+      } catch (e) {
+        console.log("[UI] handlePress: exception during stop or send", e);
         setIsListening(false);
         if (Platform.OS !== "web") {
           Haptics.notificationAsync(
@@ -174,8 +196,10 @@ export default function HomeScreen() {
       }
     } else {
       try {
+        console.log("[UI] handlePress: starting recording");
         await startRecording();
-      } catch {
+      } catch (e) {
+        console.log("[UI] handlePress: startRecording failed", e);
         Alert.alert(
           "Permission Required",
           "Please allow microphone access to use voice features."
