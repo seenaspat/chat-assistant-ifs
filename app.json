@@ -43,12 +43,6 @@
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-av",
-        {
-          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone"
-        }
-      ],
       "expo-apple-authentication",
       [
         "expo-secure-store",
@@ -58,7 +52,8 @@
         }
       ],
       "expo-font",
-      "expo-audio"
+      "expo-audio",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

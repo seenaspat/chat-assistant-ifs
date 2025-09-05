@@ -1,5 +1,5 @@
 import { useConversation } from "@/providers/conversation-provider";
-import { Audio } from "expo-av";
+import { AudioModule, RecordingPresets, useAudioRecorder } from "expo-audio";
 import * as FileSystem from "expo-file-system";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
@@ -7,7 +7,7 @@ import { Platform } from "react-native";
 export function useAudioRecording() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -101,36 +101,10 @@ export function useAudioRecording() {
         );
         setIsRecording(true);
       } else {
-        await Audio.requestPermissionsAsync();
-        await Audio.setAudioModeAsync({
-          allowsRecordingIOS: true,
-          playsInSilentModeIOS: true,
-        });
-
-        const recording = new Audio.Recording();
-        await recording.prepareToRecordAsync({
-          android: {
-            extension: ".m4a",
-            outputFormat: Audio.AndroidOutputFormat.MPEG_4,
-            audioEncoder: Audio.AndroidAudioEncoder.AAC,
-          },
-          ios: {
-            // Use AAC in .m4a for small, high-quality voice recordings
-            extension: ".m4a",
-            outputFormat: Audio.IOSOutputFormat.MPEG4AAC,
-            audioQuality: Audio.IOSAudioQuality.HIGH,
-            sampleRate: 44100,
-            numberOfChannels: 1,
-            bitRate: 96000,
-          },
-          web: {
-            mimeType: "audio/webm",
-            bitsPerSecond: 128000,
-          },
-        });
-
-        await recording.startAsync();
-        recordingRef.current = recording;
+        const perm = await AudioModule.requestRecordingPermissionsAsync();
+        if (!perm.granted) throw new Error("Microphone permission denied");
+        await audioRecorder.prepareToRecordAsync();
+        audioRecorder.record();
         setIsRecording(true);
       }
 
@@ -227,42 +201,25 @@ export function useAudioRecording() {
           mediaRecorder.stop();
         });
       } else {
-        const recording = recordingRef.current;
-        if (!recording) {
-          setIsRecording(false);
-          setIsProcessing(false);
-          if (stopTimerRef.current) {
-            clearTimeout(stopTimerRef.current);
-            stopTimerRef.current = null;
+        // expo-audio path
+        console.log(
+          "[Audio] expo-audio isRecording before stop=",
+          audioRecorder.isRecording
+        );
+        try {
+          // Stop if currently recording; if it's already stopped, this should be a no-op
+          if (audioRecorder.isRecording) {
+            console.log("[Audio] Stopping expo-audio recorder...");
+            await audioRecorder.stop();
+          } else {
+            console.log(
+              "[Audio] Recorder not recording at stop time; continuing"
+            );
           }
-          isStoppingRef.current = false;
-          return null;
+        } catch (e) {
+          console.log("[Audio] expo-audio stop() threw", e);
         }
-
-        // Check if recording is still active before stopping
-        const status = await recording.getStatusAsync();
-        console.log("[Audio] Native status before stop:", status);
-        if (!status.isRecording) {
-          console.log("[Audio] Native recording not active, cleaning up");
-          recordingRef.current = null;
-          setIsRecording(false);
-          setIsProcessing(false);
-          if (stopTimerRef.current) {
-            clearTimeout(stopTimerRef.current);
-            stopTimerRef.current = null;
-          }
-          isStoppingRef.current = false;
-          return null;
-        }
-
-        console.log("[Audio] Stopping and unloading native recording...");
-        await recording.stopAndUnloadAsync();
-        console.log("[Audio] stopAndUnloadAsync complete");
-        recordingRef.current = null;
-
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-
-        const uri = recording.getURI();
+        const uri = audioRecorder.uri;
         console.log("[Audio] getURI()=", uri);
         if (uri) {
           try {
@@ -278,7 +235,15 @@ export function useAudioRecording() {
           }
         }
         if (!uri) {
-          setLastError("No recording file URI returned");
+          setLastError("No recorded audio available");
+          setIsRecording(false);
+          setIsProcessing(false);
+          if (stopTimerRef.current) {
+            clearTimeout(stopTimerRef.current);
+            stopTimerRef.current = null;
+          }
+        } else {
+          const transcript = await transcribeAudioFromUri(uri);
           setIsRecording(false);
           setIsProcessing(false);
           if (stopTimerRef.current) {
@@ -286,19 +251,10 @@ export function useAudioRecording() {
             stopTimerRef.current = null;
           }
           isStoppingRef.current = false;
-          return null;
-        }
-
-        const transcript = await transcribeAudioFromUri(uri);
-
-        setIsRecording(false);
-        setIsProcessing(false);
-        if (stopTimerRef.current) {
-          clearTimeout(stopTimerRef.current);
-          stopTimerRef.current = null;
+          return transcript;
         }
         isStoppingRef.current = false;
-        return transcript;
+        return null;
       }
     } catch (error) {
       console.error("[Audio] Failed to stop recording:", error);
@@ -310,13 +266,6 @@ export function useAudioRecording() {
           streamRef.current = null;
         }
         mediaRecorderRef.current = null;
-      } else {
-        recordingRef.current = null;
-        try {
-          await Audio.setAudioModeAsync({ allowsRecordingIOS: false });
-        } catch (audioError) {
-          console.error("[Audio] Failed to reset audio mode:", audioError);
-        }
       }
 
       setIsRecording(false);
