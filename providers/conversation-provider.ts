@@ -27,6 +27,7 @@ export interface ConversationSettings {
   maxRecordingDurationSec: number;
   experimentalStreamingTranscription: boolean;
   voiceId?: string;
+  ttsProvider?: "openai" | "elevenlabs";
 }
 
 const IFS_SYSTEM_PROMPT = `You are a compassionate IFS (Internal Family Systems) therapist. Your role is to help users explore their internal parts and connect with their Self.
@@ -56,6 +57,7 @@ export const [ConversationProvider, useConversation] = createContextHook(() => {
     maxRecordingDurationSec: 120,
     experimentalStreamingTranscription: false,
     voiceId: "pNInz6obpgDQGcFmaJgB",
+    ttsProvider: "openai",
   });
 
   const currentConversation = useMemo(
@@ -165,10 +167,17 @@ export const [ConversationProvider, useConversation] = createContextHook(() => {
       const stored = await AsyncStorage.getItem("ifs_settings");
       if (stored) {
         const parsed = JSON.parse(stored);
-        setSettings((prev) => ({
-          ...prev,
-          ...parsed,
-        }));
+        setSettings((prev) => {
+          const merged = { ...prev, ...parsed } as ConversationSettings;
+          if (!merged.ttsProvider) {
+            merged.ttsProvider = merged.useElevenLabs ? "elevenlabs" : "openai";
+          }
+          // Ensure a sensible default voice for OpenAI
+          if (merged.ttsProvider === "openai" && !merged.voiceId) {
+            merged.voiceId = "fable";
+          }
+          return merged;
+        });
       }
     } catch (error) {
       console.error("Failed to load settings:", error);

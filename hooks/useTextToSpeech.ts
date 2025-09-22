@@ -39,18 +39,21 @@ export function useTextToSpeech() {
 
   const speak = async (
     text: string,
-    useElevenLabs: boolean = false,
+    useRemoteTTS: boolean = false,
     voiceIdOverride?: string
   ) => {
-    if (useElevenLabs) {
+    if (useRemoteTTS) {
       try {
         setIsSpeaking(true);
 
-        // Use the Eleven Labs provider
-        console.log("[TTS] useElevenLabs ON, generating speech...");
+        // Use remote provider (OpenAI or ElevenLabs) behind /api/tts
+        console.log("[TTS] remote TTS ON, generating speech...");
         const response = await elevenLabsProvider.generateSpeech({
           text,
           voice: voiceIdOverride || settings.voiceId || undefined,
+          provider:
+            ((settings as any).ttsProvider as "openai" | "elevenlabs") ||
+            (settings.useElevenLabs ? "elevenlabs" : "openai"),
         });
 
         if (Platform.OS === "web") {
@@ -88,7 +91,11 @@ export function useTextToSpeech() {
           await audio.play();
         } else {
           console.log("[TTS] native: creating temp file");
-          const tempUri = `${FileSystem.cacheDirectory}tts-${Date.now()}.mp3`;
+          const dir =
+            ((FileSystem as any).cacheDirectory as string) ||
+            ((FileSystem as any).documentDirectory as string) ||
+            "";
+          const tempUri = `${dir}tts-${Date.now()}.mp3`;
           let arrayBuffer: ArrayBuffer | null = null;
           if (typeof (response as any).arrayBuffer === "function") {
             try {
@@ -114,7 +121,7 @@ export function useTextToSpeech() {
 
           const base64 = arrayBufferToBase64(arrayBuffer);
           await FileSystem.writeAsStringAsync(tempUri, base64, {
-            encoding: FileSystem.EncodingType.Base64,
+            encoding: "base64" as any,
           });
 
           await setIsAudioActiveAsync(true);

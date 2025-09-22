@@ -33,7 +33,7 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "app.rork.ifs-therapy-conversational-app",
+      "package": "app.rork.ifs_therapy_conversational_app",
       "permissions": [
         "RECORD_AUDIO"
       ]
@@ -53,7 +53,8 @@
       ],
       "expo-font",
       "expo-audio",
-      "expo-video"
+      "expo-video",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true

@@ -28,7 +28,7 @@ export default function SettingsScreen() {
   React.useEffect(() => {
     let isMounted = true;
     const fetchVoices = async () => {
-      if (!settings.useElevenLabs) return;
+      // When ElevenLabs toggle is on, we fetch EL voices; otherwise, fetch OpenAI list
       setLoadingVoices(true);
       setVoiceError(null);
       try {
@@ -50,7 +50,10 @@ export default function SettingsScreen() {
             "Server URL not configured. Set EXPO_PUBLIC_API_BASE_URL."
           );
         }
-        const url = `${resolvedBase}/api/tts`;
+        const providerParam =
+          (settings as any).ttsProvider ||
+          (settings.useElevenLabs ? "elevenlabs" : "openai");
+        const url = `${resolvedBase}/api/tts?provider=${providerParam}`;
         console.log("[Settings:Voices] fetching", url, "method=GET");
         let res = await fetch(url, { method: "GET" });
         console.log("[Settings:Voices] GET status", res.status, res.statusText);
@@ -61,7 +64,7 @@ export default function SettingsScreen() {
           res = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: "voices" }),
+            body: JSON.stringify({ action: "voices", provider: providerParam }),
           });
           console.log(
             "[Settings:Voices] POST voices status",
@@ -87,7 +90,7 @@ export default function SettingsScreen() {
     return () => {
       isMounted = false;
     };
-  }, [settings.useElevenLabs]);
+  }, [settings.useElevenLabs, (settings as any).ttsProvider]);
 
   return (
     <View style={styles.container}>
@@ -138,23 +141,53 @@ export default function SettingsScreen() {
                 <View style={styles.settingLeft}>
                   <Headphones color="#4a9eff" size={20} />
                   <View style={styles.settingTextContainer}>
-                    <Text style={styles.settingLabel}>Use Eleven Labs TTS</Text>
+                    <Text style={styles.settingLabel}>TTS Provider</Text>
                     <Text style={styles.settingDescription}>
-                      High-quality AI voice (requires API key)
+                      Choose which service generates voice
                     </Text>
                   </View>
                 </View>
-                <Switch
-                  value={settings.useElevenLabs}
-                  onValueChange={(value) =>
-                    updateSettings({ useElevenLabs: value })
-                  }
-                  trackColor={{ false: "#767577", true: "#4a9eff" }}
-                  thumbColor={settings.useElevenLabs ? "#fff" : "#f4f3f4"}
-                />
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {["openai", "elevenlabs"].map((prov) => (
+                    <Pressable
+                      key={prov}
+                      style={[
+                        styles.durationChip,
+                        ((settings as any).ttsProvider ||
+                          (settings.useElevenLabs
+                            ? "elevenlabs"
+                            : "openai")) === prov && styles.durationChipActive,
+                      ]}
+                      onPress={() =>
+                        updateSettings({
+                          ttsProvider: prov as any,
+                          useElevenLabs: prov === "elevenlabs",
+                          voiceId:
+                            prov === "openai"
+                              ? settings.voiceId &&
+                                [
+                                  "fable",
+                                  "alloy",
+                                  "verse",
+                                  "onyx",
+                                  "nova",
+                                  "shimmer",
+                                ].includes(settings.voiceId)
+                                ? settings.voiceId
+                                : "fable"
+                              : settings.voiceId,
+                        })
+                      }
+                    >
+                      <Text style={styles.durationChipText}>
+                        {prov === "openai" ? "OpenAI" : "ElevenLabs"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
 
-              {settings.useElevenLabs && (
+              {true && (
                 <View style={{ gap: 8 }}>
                   <View
                     style={[styles.settingItem, { alignItems: "flex-start" }]}
@@ -202,7 +235,8 @@ export default function SettingsScreen() {
                                     Haptics.ImpactFeedbackStyle.Light
                                   ).catch(() => {});
                                   await speak(
-                                    "Hello, this is a short sample for this voice.",
+                                    // IFS-aligned gentle, compassionate sample
+                                    "Hi, I’m here with you. Let’s take a slow breath together and gently notice what part of you is most present right now.",
                                     true,
                                     v.voice_id
                                   );
@@ -256,7 +290,7 @@ export default function SettingsScreen() {
               </View>
             </View>
 
-            <View style={styles.section}>
+            <View className={undefined} style={styles.section}>
               <Text style={styles.sectionTitle}>About IFS Therapy</Text>
               <View style={styles.infoCard}>
                 <Info color="#4a9eff" size={20} />

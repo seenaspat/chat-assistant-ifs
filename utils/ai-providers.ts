@@ -215,26 +215,29 @@ export const createVercelGatewayProvider = (
 // // Using direct OpenAI API
 // const provider = createVercelGatewayProvider('your-openai-api-key');
 
-// Eleven Labs TTS Provider (via secure proxy)
+// Remote TTS Provider (via secure proxy) supporting ElevenLabs and OpenAI
 export const elevenLabsProvider = {
   generateSpeech: async ({
     text,
-    voice = "pNInz6obpgDQGcFmaJgB",
+    voice,
+    provider,
   }: {
     text: string;
     voice?: string;
+    provider?: "elevenlabs" | "openai";
   }) => {
     const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || "";
     try {
       console.log("[TTS] Calling /api/tts", {
         baseUrl,
         voice,
+        provider,
         textLen: text?.length,
       });
       const response = await fetch(`${baseUrl}/api/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice }),
+        body: JSON.stringify({ text, voice, provider }),
       });
 
       console.log(

@@ -18,6 +18,42 @@ export default async function handler(req: Request): Promise<Response> {
   if (req.method === "GET") {
     // Lightweight voice list proxy for Settings UI
     try {
+      const url = new URL(req.url);
+      const providerParam = url.searchParams.get("provider")?.toLowerCase();
+      const provider = (
+        providerParam ||
+        process.env.TTS_PROVIDER ||
+        "openai"
+      ).toLowerCase();
+
+      if (provider === "openai") {
+        // Static OpenAI voice list (normalized to ElevenLabs shape)
+        const openAIVoices = [
+          "fable",
+          "alloy",
+          "verse",
+          "onyx",
+          "nova",
+          "shimmer",
+        ];
+        const voices = openAIVoices.map((name) => ({
+          voice_id: name,
+          name,
+          preview_url: null,
+        }));
+        try {
+          console.log(
+            "[API/TTS] GET voices provider=openai count=",
+            voices.length
+          );
+        } catch {}
+        return new Response(JSON.stringify({ voices }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // Default to ElevenLabs
       const apiKey =
         process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY;
       if (!apiKey) {
@@ -49,7 +85,6 @@ export default async function handler(req: Request): Promise<Response> {
         );
       }
       const data = await upstream.json();
-      // Normalize minimal fields we use to reduce payload
       const voices = (data?.voices || []).map((v: any) => ({
         voice_id: v.voice_id,
         name: v.name,
@@ -86,26 +121,50 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
-    const apiKey =
-      process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY;
-    if (!apiKey) {
-      console.error("[TTS] Missing ELEVENLABS_API_KEY");
-      return new Response(
-        JSON.stringify({ error: "Missing ELEVENLABS_API_KEY" }),
-        {
-          status: 500,
-          headers: { "Content-Type": "application/json", ...corsHeaders },
-        }
-      );
-    }
-
     const body: any = await req.json();
     const action: string | undefined = body?.action;
+    const provider = (
+      body?.provider ||
+      process.env.TTS_PROVIDER ||
+      "openai"
+    ).toLowerCase();
 
     if (action === "voices") {
+      if (provider === "openai") {
+        const openAIVoices = [
+          "fable",
+          "alloy",
+          "verse",
+          "onyx",
+          "nova",
+          "shimmer",
+        ];
+        const voices = openAIVoices.map((name) => ({
+          voice_id: name,
+          name,
+          preview_url: null,
+        }));
+        return new Response(JSON.stringify({ voices }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
+
+      // ElevenLabs voices
       try {
+        const elevenKey =
+          process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY;
+        if (!elevenKey) {
+          return new Response(
+            JSON.stringify({ error: "Missing ELEVENLABS_API_KEY" }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            }
+          );
+        }
         const upstream = await fetch("https://api.elevenlabs.io/v1/voices", {
-          headers: { "xi-api-key": apiKey },
+          headers: { "xi-api-key": elevenKey },
         });
         console.log(
           "[API/TTS] POST action=voices upstream status=",
@@ -152,10 +211,6 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const text: string | undefined = body?.text;
-    const voice: string = body?.voice ?? "pNInz6obpgDQGcFmaJgB";
-    const modelId: string =
-      body?.modelId ?? body?.model_id ?? "eleven_multilingual_v2";
-
     if (!text || typeof text !== "string") {
       return new Response(
         JSON.stringify({ error: "Missing required field: text" }),
@@ -166,7 +221,95 @@ export default async function handler(req: Request): Promise<Response> {
       );
     }
 
-    // Direct REST call with xi-api-key ensures correct voice selection
+    if (provider === "openai") {
+      const openaiKey = process.env.OPENAI_API_KEY;
+      if (!openaiKey) {
+        return new Response(
+          JSON.stringify({ error: "Missing OPENAI_API_KEY" }),
+          {
+            status: 500,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          }
+        );
+      }
+
+      const allowedVoices = new Set([
+        "fable",
+        "alloy",
+        "verse",
+        "onyx",
+        "nova",
+        "shimmer",
+      ]);
+      const requestedVoice: string | undefined = body?.voice;
+      const envVoice: string | undefined = process.env.OPENAI_TTS_VOICE;
+      const voiceName: string =
+        requestedVoice && allowedVoices.has(requestedVoice)
+          ? requestedVoice
+          : envVoice && allowedVoices.has(envVoice)
+          ? envVoice
+          : "fable"; // gentle, warm tone
+      const model: string =
+        body?.model || process.env.OPENAI_TTS_MODEL || "tts-1";
+
+      const openaiBase =
+        process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+      const upstream = await fetch(
+        `${openaiBase.replace(/\/$/, "")}/audio/speech`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "audio/mpeg",
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${openaiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            voice: voiceName,
+            input: text,
+            response_format: "mp3",
+          }),
+        }
+      );
+
+      if (!upstream.ok || !upstream.body) {
+        const errText = await upstream.text().catch(() => "Upstream error");
+        return new Response(
+          JSON.stringify({
+            error: `OpenAI TTS error: ${upstream.status}`,
+            details: errText,
+          }),
+          {
+            status: upstream.status,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          }
+        );
+      }
+
+      return new Response(upstream.body, {
+        status: 200,
+        headers: { "Content-Type": "audio/mpeg", ...corsHeaders },
+      });
+    }
+
+    // ElevenLabs default
+    const elevenKey =
+      process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY;
+    if (!elevenKey) {
+      console.error("[TTS] Missing ELEVENLABS_API_KEY");
+      return new Response(
+        JSON.stringify({ error: "Missing ELEVENLABS_API_KEY" }),
+        {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }
+      );
+    }
+
+    const voice: string = body?.voice ?? "pNInz6obpgDQGcFmaJgB";
+    const modelId: string =
+      body?.modelId ?? body?.model_id ?? "eleven_multilingual_v2";
+
     const upstream = await fetch(
       `https://api.elevenlabs.io/v1/text-to-speech/${voice}`,
       {
@@ -174,7 +317,7 @@ export default async function handler(req: Request): Promise<Response> {
         headers: {
           Accept: "audio/mpeg",
           "Content-Type": "application/json",
-          "xi-api-key": apiKey,
+          "xi-api-key": elevenKey,
         },
         body: JSON.stringify({
           text,
