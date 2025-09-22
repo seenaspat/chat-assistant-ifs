@@ -1,7 +1,7 @@
 import { useConversation } from "@/providers/conversation-provider";
 import { elevenLabsProvider } from "@/utils/ai-providers";
 import { createAudioPlayer, setIsAudioActiveAsync } from "expo-audio";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Speech from "expo-speech";
 import { useRef, useState } from "react";
 import { Platform } from "react-native";
@@ -121,7 +121,9 @@ export function useTextToSpeech() {
 
           const base64 = arrayBufferToBase64(arrayBuffer);
           await FileSystem.writeAsStringAsync(tempUri, base64, {
-            encoding: "base64" as any,
+            encoding: (FileSystem as any).EncodingType
+              ? (FileSystem as any).EncodingType.Base64
+              : ("base64" as any),
           });
 
           await setIsAudioActiveAsync(true);
@@ -141,7 +143,7 @@ export function useTextToSpeech() {
           return;
         }
       } catch (error) {
-        console.error("Eleven Labs TTS error:", error);
+        console.error("Remote TTS error:", error);
         setIsSpeaking(false);
         // Fall back to native TTS
         return speakNative(text);

@@ -1,6 +1,6 @@
 import { useConversation } from "@/providers/conversation-provider";
 import { AudioModule, RecordingPresets, useAudioRecorder } from "expo-audio";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
 
@@ -75,6 +75,10 @@ export function useAudioRecording() {
           playsInSilentMode: true,
         });
 
+        // Ensure any previous recording is reset
+        try {
+          if (audioRecorder.isRecording) audioRecorder.stop();
+        } catch {}
         await audioRecorder.prepareToRecordAsync();
         audioRecorder.record();
         recordStartRef.current = Date.now();
@@ -178,21 +182,18 @@ export function useAudioRecording() {
           }).catch(() => {});
           return null;
         }
-        // Wait for file to flush and grow
-        for (let i = 0; i < 20; i++) {
+        // Wait for file to flush and grow (up to ~5s)
+        let size = 0;
+        for (let i = 0; i < 100; i++) {
           const info = await FileSystem.getInfoAsync(uri).catch(
             () => null as any
           );
-          const size = (info as any)?.size ?? 0;
-          if (size > 2000) break;
+          size = (info as any)?.size ?? 0;
+          if (size > 1024) break;
           await sleep(50);
         }
-        const info = await FileSystem.getInfoAsync(uri).catch(
-          () => null as any
-        );
-        const size = (info as any)?.size ?? 0;
         console.log("[Audio] recorded file size=", size);
-        if (!size || size < 2000) {
+        if (!size || size < 1024) {
           setLastError("Recording too short or empty");
           setIsRecording(false);
           setIsProcessing(false);

@@ -165,7 +165,12 @@ export default function HomeScreen() {
           );
           if (response && settings.autoPlayResponses) {
             console.log("[UI] handlePress: speaking response");
-            speak(response, settings.useElevenLabs);
+            const useRemote =
+              (settings as any).ttsProvider === "openai" ||
+              (settings as any).ttsProvider === "elevenlabs"
+                ? true
+                : settings.useElevenLabs;
+            speak(response, useRemote);
           }
           // Auto-scroll to bottom after new message
           setTimeout(() => {
