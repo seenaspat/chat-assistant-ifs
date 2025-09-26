@@ -141,6 +141,33 @@ export default function SettingsScreen() {
                 <View style={styles.settingLeft}>
                   <Headphones color="#4a9eff" size={20} />
                   <View style={styles.settingTextContainer}>
+                    <Text style={styles.settingLabel}>TTS Speed</Text>
+                    <Text style={styles.settingDescription}>
+                      Slow down or speed up speech (OpenAI supported)
+                    </Text>
+                  </View>
+                </View>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {[0.85, 1.0, 1.15].map((rate) => (
+                    <Pressable
+                      key={rate}
+                      style={[
+                        styles.durationChip,
+                        (settings as any).ttsSpeed === rate &&
+                          styles.durationChipActive,
+                      ]}
+                      onPress={() => updateSettings({ ttsSpeed: rate as any })}
+                    >
+                      <Text style={styles.durationChipText}>{rate}x</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              <View style={styles.settingItem}>
+                <View style={styles.settingLeft}>
+                  <Headphones color="#4a9eff" size={20} />
+                  <View style={styles.settingTextContainer}>
                     <Text style={styles.settingLabel}>TTS Provider</Text>
                     <Text style={styles.settingDescription}>
                       Choose which service generates voice

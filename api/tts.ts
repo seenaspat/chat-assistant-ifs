@@ -268,6 +268,12 @@ export default async function handler(req: Request): Promise<Response> {
             voice: voiceName,
             input: text,
             response_format: "mp3",
+            // speed is supported by OpenAI (0.25 to 4.0). We'll clamp to [0.5, 2.0].
+            speed: (() => {
+              const s = Number(body?.speed);
+              if (!Number.isFinite(s)) return undefined;
+              return Math.max(0.5, Math.min(2.0, s));
+            })(),
           }),
         }
       );

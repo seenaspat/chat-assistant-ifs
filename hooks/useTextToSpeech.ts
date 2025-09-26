@@ -54,6 +54,7 @@ export function useTextToSpeech() {
           provider:
             ((settings as any).ttsProvider as "openai" | "elevenlabs") ||
             (settings.useElevenLabs ? "elevenlabs" : "openai"),
+          speed: ((settings as any).ttsSpeed as number) || 1.0,
         });
 
         if (Platform.OS === "web") {
@@ -87,6 +88,11 @@ export function useTextToSpeech() {
             URL.revokeObjectURL(audioUrl);
           };
 
+          // Apply playbackRate for web
+          const rate = ((settings as any).ttsSpeed as number) || 1.0;
+          if (!Number.isNaN(rate) && rate > 0) {
+            (audio as any).playbackRate = rate;
+          }
           console.log("[TTS] playing audio...");
           await audio.play();
         } else {
@@ -127,7 +133,10 @@ export function useTextToSpeech() {
           });
 
           await setIsAudioActiveAsync(true);
-          const player = createAudioPlayer({ uri: tempUri });
+          const player = createAudioPlayer({
+            uri: tempUri,
+            playbackRate: ((settings as any).ttsSpeed as number) || 1.0,
+          });
           player.play();
 
           const poll = setInterval(() => {

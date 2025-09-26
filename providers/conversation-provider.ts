@@ -28,6 +28,7 @@ export interface ConversationSettings {
   experimentalStreamingTranscription: boolean;
   voiceId?: string;
   ttsProvider?: "openai" | "elevenlabs";
+  ttsSpeed?: number; // 0.5 - 2.0
 }
 
 const IFS_SYSTEM_PROMPT = `You are a compassionate IFS (Internal Family Systems) therapist. Your role is to help users explore their internal parts and connect with their Self.
@@ -58,6 +59,7 @@ export const [ConversationProvider, useConversation] = createContextHook(() => {
     experimentalStreamingTranscription: false,
     voiceId: "pNInz6obpgDQGcFmaJgB",
     ttsProvider: "openai",
+    ttsSpeed: 1.0,
   });
 
   const currentConversation = useMemo(
@@ -171,6 +173,9 @@ export const [ConversationProvider, useConversation] = createContextHook(() => {
           const merged = { ...prev, ...parsed } as ConversationSettings;
           if (!merged.ttsProvider) {
             merged.ttsProvider = merged.useElevenLabs ? "elevenlabs" : "openai";
+          }
+          if (!merged.ttsSpeed) {
+            merged.ttsSpeed = 1.0;
           }
           // Ensure a sensible default voice for OpenAI
           if (merged.ttsProvider === "openai" && !merged.voiceId) {

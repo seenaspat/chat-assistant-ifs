@@ -221,10 +221,12 @@ export const elevenLabsProvider = {
     text,
     voice,
     provider,
+    speed,
   }: {
     text: string;
     voice?: string;
     provider?: "elevenlabs" | "openai";
+    speed?: number;
   }) => {
     const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL || "";
     try {
@@ -233,11 +235,12 @@ export const elevenLabsProvider = {
         voice,
         provider,
         textLen: text?.length,
+        speed,
       });
       const response = await fetch(`${baseUrl}/api/tts`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, voice, provider }),
+        body: JSON.stringify({ text, voice, provider, speed }),
       });
 
       console.log(
