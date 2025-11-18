@@ -2,6 +2,7 @@ import { useConversation } from "@/providers/conversation-provider";
 import { elevenLabsProvider } from "@/utils/ai-providers";
 import { createAudioPlayer, setIsAudioActiveAsync } from "expo-audio";
 import * as FileSystem from "expo-file-system/legacy";
+import { EncodingType } from "expo-file-system/legacy";
 import * as Speech from "expo-speech";
 import { useRef, useState } from "react";
 import { Platform } from "react-native";
@@ -89,9 +90,9 @@ export function useTextToSpeech() {
           };
 
           // Apply playbackRate for web
-          const rate = ((settings as any).ttsSpeed as number) || 1.0;
+          const rate = settings.ttsSpeed ?? 1.0;
           if (!Number.isNaN(rate) && rate > 0) {
-            (audio as any).playbackRate = rate;
+            audio.playbackRate = rate;
           }
           console.log("[TTS] playing audio...");
           await audio.play();
@@ -127,16 +128,17 @@ export function useTextToSpeech() {
 
           const base64 = arrayBufferToBase64(arrayBuffer);
           await FileSystem.writeAsStringAsync(tempUri, base64, {
-            encoding: (FileSystem as any).EncodingType
-              ? (FileSystem as any).EncodingType.Base64
-              : ("base64" as any),
+            encoding: EncodingType.Base64,
           });
 
           await setIsAudioActiveAsync(true);
-          const player = createAudioPlayer({
-            uri: tempUri,
-            playbackRate: ((settings as any).ttsSpeed as number) || 1.0,
-          });
+          const player = createAudioPlayer(tempUri);
+          const nativeRate = settings.ttsSpeed ?? 1.0;
+          try {
+            // Property exists on AudioPlayer per expo-audio typings
+            (player as unknown as { playbackRate: number }).playbackRate =
+              nativeRate;
+          } catch {}
           player.play();
 
           const poll = setInterval(() => {

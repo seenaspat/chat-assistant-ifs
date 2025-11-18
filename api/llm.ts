@@ -48,20 +48,32 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // Call OpenAI non-streaming for simplicity, then optionally stream the text ourselves.
+    const targetModel: string = model || "gpt-5.1-2025-11-13";
+    const payload: {
+      model: string;
+      messages: ModelMessage[];
+      stream: boolean;
+      reasoning?: { effort: "medium" };
+    } = {
+      model: targetModel,
+      messages: (messages as ModelMessage[]).map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+      stream: false,
+    };
+
+    if (targetModel.startsWith("gpt-5.1")) {
+      payload.reasoning = { effort: "medium" };
+    }
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: model || "gpt-4o-mini",
-        messages: (messages as ModelMessage[]).map((m) => ({
-          role: m.role,
-          content: m.content,
-        })),
-        stream: false,
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
