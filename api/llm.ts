@@ -62,7 +62,7 @@ export default async function handler(req: Request): Promise<Response> {
           modalities: ["text"] as const,
           input: (messages as ModelMessage[]).map((m) => ({
             role: m.role,
-            content: [{ type: "input_text" as const, text: m.content }],
+            content: m.content,
           })),
         }
       : {
