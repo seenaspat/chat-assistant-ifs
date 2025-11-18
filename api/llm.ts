@@ -48,39 +48,20 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // Call OpenAI non-streaming for simplicity, then optionally stream the text ourselves.
-    const targetModel: string = model || "gpt-5.1";
-    const isResponsesModel = targetModel.startsWith("gpt-5.1");
-
-    const upstreamUrl = isResponsesModel
-      ? "https://api.openai.com/v1/responses"
-      : "https://api.openai.com/v1/chat/completions";
-
-    const payload = isResponsesModel
-      ? {
-          model: targetModel,
-          reasoning: { effort: "medium" as const },
-          modalities: ["text"] as const,
-          input: (messages as ModelMessage[]).map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-        }
-      : {
-          model: targetModel,
-          messages: (messages as ModelMessage[]).map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          stream: false,
-        };
-
-    const response = await fetch(upstreamUrl, {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        model: model || "gpt-4o-mini",
+        messages: (messages as ModelMessage[]).map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        stream: false,
+      }),
     });
 
     if (!response.ok) {
@@ -95,9 +76,7 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     const data = await response.json();
-    const text: string = isResponsesModel
-      ? data?.output_text?.join("") ?? ""
-      : data?.choices?.[0]?.message?.content ?? "";
+    const text: string = data?.choices?.[0]?.message?.content ?? "";
     try {
       console.log(
         "[API/LLM] success text len=",
