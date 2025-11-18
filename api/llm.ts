@@ -48,7 +48,7 @@ export default async function handler(req: Request): Promise<Response> {
     }
 
     // Call OpenAI non-streaming for simplicity, then optionally stream the text ourselves.
-    const targetModel: string = model || "gpt-5.1-2025-11-13";
+    const targetModel: string = model || "gpt-5.1";
     const isResponsesModel = targetModel.startsWith("gpt-5.1");
 
     const upstreamUrl = isResponsesModel
@@ -62,7 +62,7 @@ export default async function handler(req: Request): Promise<Response> {
           modalities: ["text"] as const,
           input: (messages as ModelMessage[]).map((m) => ({
             role: m.role,
-            content: [{ type: "text" as const, text: m.content }],
+            content: [{ type: "input_text" as const, text: m.content }],
           })),
         }
       : {
