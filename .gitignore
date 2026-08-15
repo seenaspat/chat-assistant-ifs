@@ -29,8 +29,10 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# Environment files may contain credentials. Keep every variant local and
+# explicitly allow only the documented, value-free example.
+.env*
+!.env.example
 
 # typescript
 *.tsbuildinfo
