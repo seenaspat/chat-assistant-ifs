@@ -12,16 +12,18 @@ A React Native app built with Expo that provides an AI-powered conversational in
 
 ## Environment Setup
 
-### Eleven Labs TTS (Optional)
+### AI and speech credentials
 
-To use high-quality AI voices, add your Eleven Labs API key:
+AI provider credentials are read only by the server-side API routes. Never use
+an `EXPO_PUBLIC_` prefix for an OpenAI, ElevenLabs, or other provider key:
 
-1. Get an API key from [Eleven Labs](https://elevenlabs.io/)
-2. Set the environment variable:
-   ```bash
-   export EXPO_PUBLIC_ELEVEN_LABS_API_KEY="your-api-key-here"
-   ```
-3. Enable "Use Eleven Labs TTS" in the app settings
+```bash
+cp .env.example .env.local
+# Add OPENAI_API_KEY and, optionally, ELEVENLABS_API_KEY to .env.local.
+```
+
+The Expo app calls the `/api/llm`, `/api/stt`, and `/api/tts` proxy routes via
+`EXPO_PUBLIC_API_BASE_URL`; provider credentials remain in the server runtime.
 
 ## Development
 
@@ -57,7 +59,9 @@ bun run start-web
 
 3. **Set environment variables in Vercel dashboard:**
    - Go to your project settings
-   - Add `EXPO_PUBLIC_ELEVEN_LABS_API_KEY` if using Eleven Labs
+   - Add `OPENAI_API_KEY`
+   - Add `ELEVENLABS_API_KEY` if using ElevenLabs
+   - Set `EXPO_PUBLIC_API_BASE_URL` to the deployed API origin
 
 ### Alternative: One-command deploy
 
@@ -70,7 +74,9 @@ bunx expo export --platform web && vercel --prod
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `EXPO_PUBLIC_ELEVEN_LABS_API_KEY` | Eleven Labs API key for high-quality TTS | No |
+| `EXPO_PUBLIC_API_BASE_URL` | Public origin of the server-side proxy routes | Yes |
+| `OPENAI_API_KEY` | Server-only LLM, transcription, and optional TTS credential | Yes |
+| `ELEVENLABS_API_KEY` | Server-only ElevenLabs TTS credential | No |
 
 ## Tech Stack
 
